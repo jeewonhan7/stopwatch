@@ -133,6 +133,7 @@
       <rect x="-300" y="222" width="1000" height="160" fill="url(#concrete)"/>
       <line x1="-300" y1="222" x2="700" y2="222" stroke="#8f8b81" stroke-width="3"/>
 
+      <g id="bikeBody">
       <g transform="translate(95 160)"><g class="spin"><use href="#wheel"/></g></g>
       <g transform="translate(305 160)"><g class="spin"><use href="#wheel"/></g></g>
 
@@ -184,6 +185,7 @@
         <rect x="280" y="-24" width="10" height="4" rx="2" fill="#111" stroke="none"/>
         <g id="nearLeg" data-skin="#e0ac7e" data-short="#111"></g>
         <g id="nearArm"></g>
+      </g>
       </g>
     </g>
   </svg>
@@ -319,9 +321,34 @@
     return (h > 0 ? h + ':' : '') + pad(m) + ':' + pad(s) + '.' + pad(cs);
   }
 
-  // 경과 시간에 맞춰 바퀴·페달·도로를 움직임 (정지하면 그 자리에 멈춤)
+  // 랩을 누르면 브레이크: 0.2초 만에 멈추고 잠깐 섰다가, 다시 밟아서 초 단위 박자를 따라잡음
+  const BRAKE_STOP_MS = 200, BRAKE_HOLD_MS = 600;
+  const bikeBody = document.getElementById('bikeBody');
+  let visRevs = 0;          // 화면에 보이는 바퀴 회전 수
+  let lastT = 0;
+  let brakeAt = -Infinity;  // 브레이크를 잡은 경과 시간
+
+  function advanceBike(t) {
+    const dt = Math.max(0, t - lastT) / 1000;
+    lastT = t;
+    const target = t / WHEEL_REV_MS;
+    const since = t - brakeAt;
+    if (since < BRAKE_HOLD_MS) {
+      const speed = Math.max(0, 1 - since / BRAKE_STOP_MS);
+      visRevs += speed * dt;
+      const dip = Math.sin(Math.PI * since / BRAKE_HOLD_MS) * 2;  // 앞으로 쏠림
+      bikeBody.setAttribute('transform', `rotate(${dip} 305 222)`);
+    } else {
+      bikeBody.removeAttribute('transform');
+      const lag = target - visRevs;
+      visRevs = lag > 0.002 ? Math.min(target, visRevs + (1 + 3 * lag) * dt) : target;
+    }
+    return visRevs;
+  }
+
+  // 바퀴·페달·도로를 그림 (정지하면 그 자리에 멈춤)
   function renderBike(t) {
-    const revs = t / WHEEL_REV_MS;
+    const revs = advanceBike(t);
     spins.forEach(g => g.setAttribute('transform', `rotate(${(revs * 360) % 360})`));
     drawPedaling(revs * Math.PI * 2);
     const offset = (revs * WHEEL_CIRC) % 480;
@@ -398,6 +425,7 @@
     if (!running) return;
     const t = total();
     laps.push({ split: t - lapStart, cum: t });
+    brakeAt = t;
     lapStart = t;
     renderLaps();
   }
@@ -407,6 +435,9 @@
     elapsed = 0;
     lapStart = 0;
     laps = [];
+    visRevs = 0;
+    lastT = 0;
+    brakeAt = -Infinity;
     display.textContent = format(0);
     renderBike(0);
     lapResetBtn.textContent = '랩';
