@@ -9,6 +9,7 @@
     --bg: #f5f5f7;
     --text: #1d1d1f;
     --border: #e5e5ea;
+    --muted: #86868b;
     --red: #d2001e;
     --dark: #1d1d1f;
     --neutral: #d1d1d6;
@@ -20,6 +21,7 @@
       --bg: #000000;
       --text: #f5f5f7;
       --border: #2c2c2e;
+      --muted: #98989f;
       --dark: #3a3a3c;
       --neutral: #3a3a3c;
     }
@@ -74,8 +76,9 @@
     font-variant-numeric: tabular-nums;
     font-size: 17px;
   }
-  .laps li.best { color: var(--best); }
-  .laps li.worst { color: var(--worst); }
+  .laps .split { flex: 1; text-align: right; margin-right: 20px; color: var(--muted); font-size: 15px; }
+  .laps li.best .split { color: var(--best); }
+  .laps li.worst .split { color: var(--worst); }
 </style>
 </head>
 <body>
@@ -333,28 +336,38 @@
     rafId = requestAnimationFrame(tick);
   }
 
+  // 각 랩: 구간 기록(+)과 시작부터의 누적 시간
+  function lapRow(n, split, cum) {
+    return `<span>랩 ${n}</span><span class="split">+${format(split)}</span><span class="cum">${format(cum)}</span>`;
+  }
+
   function renderCurrentLap() {
-    const cur = lapsEl.querySelector('li.current span:last-child');
-    if (cur) cur.textContent = format(total() - lapStart);
+    const cur = lapsEl.querySelector('li.current');
+    if (!cur) return;
+    const t = total();
+    cur.querySelector('.split').textContent = '+' + format(t - lapStart);
+    cur.querySelector('.cum').textContent = format(t);
   }
 
   function renderLaps() {
     lapsEl.innerHTML = '';
     if (!running && elapsed === 0) return;
 
+    const t = total();
     const li = document.createElement('li');
     li.className = 'current';
-    li.innerHTML = `<span>랩 ${laps.length + 1}</span><span>${format(total() - lapStart)}</span>`;
+    li.innerHTML = lapRow(laps.length + 1, t - lapStart, t);
     lapsEl.appendChild(li);
 
-    const min = Math.min(...laps), max = Math.max(...laps);
+    const splits = laps.map(l => l.split);
+    const min = Math.min(...splits), max = Math.max(...splits);
     for (let i = laps.length - 1; i >= 0; i--) {
       const item = document.createElement('li');
       if (laps.length >= 2) {
-        if (laps[i] === min) item.className = 'best';
-        else if (laps[i] === max) item.className = 'worst';
+        if (laps[i].split === min) item.className = 'best';
+        else if (laps[i].split === max) item.className = 'worst';
       }
-      item.innerHTML = `<span>랩 ${i + 1}</span><span>${format(laps[i])}</span>`;
+      item.innerHTML = lapRow(i + 1, laps[i].split, laps[i].cum);
       lapsEl.appendChild(item);
     }
   }
@@ -384,7 +397,7 @@
   function lap() {
     if (!running) return;
     const t = total();
-    laps.push(t - lapStart);
+    laps.push({ split: t - lapStart, cum: t });
     lapStart = t;
     renderLaps();
   }
