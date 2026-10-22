@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>스탑워치</title>
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --text: #1d1d1f;
+    --border: #e5e5ea;
+    --red: #d2001e;
+    --dark: #1d1d1f;
+    --neutral: #d1d1d6;
+    --best: #34c759;
+    --worst: #ff3b30;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --text: #f5f5f7;
+      --border: #2c2c2e;
+      --dark: #3a3a3c;
+      --neutral: #3a3a3c;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .app { width: 100%; max-width: 420px; }
+  .scene { display: block; width: 100%; height: auto; border-radius: 16px; }
+  .display {
+    font-size: clamp(48px, 16vw, 80px);
+    font-weight: 200;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -1px;
+    margin: 16px 0 32px;
+  }
+  .controls {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 32px;
+  }
+  button {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    border: none;
+    font-size: 17px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--text);
+    background: var(--neutral);
+    transition: transform 0.08s, opacity 0.2s;
+  }
+  button:active { transform: scale(0.94); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.start { background: var(--red); color: #fff; }
+  button.stop { background: var(--dark); color: #fff; }
+  .laps { list-style: none; border-top: 1px solid var(--border); }
+  .laps li {
+    display: flex;
+    justify-content: space-between;
+    padding: 14px 4px;
+    border-bottom: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+    font-size: 17px;
+  }
+  .laps li.best { color: var(--best); }
+  .laps li.worst { color: var(--worst); }
+</style>
+</head>
+<body>
+<div class="app">
+  <svg class="scene" viewBox="0 0 400 310" aria-hidden="true">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#8ccbf2"/>
+        <stop offset="1" stop-color="#e6f3fa"/>
+      </linearGradient>
+      <linearGradient id="frameGrad" gradientUnits="userSpaceOnUse" x1="0" y1="50" x2="0" y2="175">
+        <stop offset="0" stop-color="#ff2a3d"/>
+        <stop offset="1" stop-color="#9e0016"/>
+      </linearGradient>
+      <!-- 시멘트 도로: 업힐 미끄럼 방지 원형 홈 + 줄눈 -->
+      <pattern id="concrete" class="scroll" patternUnits="userSpaceOnUse" width="96" height="24">
+        <rect width="96" height="24" fill="#c9c5bb"/>
+        <circle cx="12" cy="12" r="6" fill="none" stroke="#ada99f" stroke-width="2"/>
+        <circle cx="36" cy="12" r="6" fill="none" stroke="#ada99f" stroke-width="2"/>
+        <circle cx="60" cy="12" r="6" fill="none" stroke="#ada99f" stroke-width="2"/>
+        <circle cx="84" cy="12" r="6" fill="none" stroke="#ada99f" stroke-width="2"/>
+        <line x1="0.5" y1="0" x2="0.5" y2="24" stroke="#99958b" stroke-width="1.5"/>
+      </pattern>
+      <!-- 길가 풀숲 + 반사 기둥 -->
+      <pattern id="verge" class="scroll" patternUnits="userSpaceOnUse" width="160" height="40" y="186">
+        <rect width="160" height="40" fill="#7fae5c"/>
+        <path d="M0 14 q20 -10 40 0 t40 0 t40 0 t40 0 V40 H0Z" fill="#6c9a4c"/>
+        <rect x="60" y="4" width="5" height="32" fill="#f4f4f4"/>
+        <rect x="60" y="8" width="5" height="6" fill="#e0001b"/>
+      </pattern>
+      <!-- 딥 림 휠 (중심 0,0) -->
+      <g id="wheel">
+        <circle r="62" fill="none" stroke="#111" stroke-width="6"/>
+        <circle r="53" fill="none" stroke="#1b1b1b" stroke-width="13"/>
+        <circle r="46.5" fill="none" stroke="#d2001e" stroke-width="1.5"/>
+        <g id="spokes" stroke="#8e8e93" stroke-width="1"></g>
+        <!-- 1초마다 정확히 맨 위로 돌아오는 표시 -->
+        <rect x="-3" y="-60" width="6" height="14" rx="2" fill="#fff"/>
+        <circle r="6" fill="#2c2c2e"/>
+        <circle r="2.5" fill="#d2001e"/>
+      </g>
+    </defs>
+
+    <!-- 하늘 / 산 -->
+    <rect width="400" height="310" fill="url(#sky)"/>
+    <polygon points="0,150 60,95 120,130 190,70 260,120 330,80 400,115 400,310 0,310" fill="#a9c4b6"/>
+    <polygon points="0,200 70,150 140,185 220,135 300,175 360,145 400,165 400,310 0,310" fill="#7fa58a"/>
+
+    <!-- 오르막 (전체를 기울임) -->
+    <g transform="translate(0 50) rotate(-8 200 160)">
+      <rect x="-300" y="186" width="1000" height="40" fill="url(#verge)"/>
+      <rect x="-300" y="222" width="1000" height="160" fill="url(#concrete)"/>
+      <line x1="-300" y1="222" x2="700" y2="222" stroke="#8f8b81" stroke-width="3"/>
+
+      <g transform="translate(95 160)"><g class="spin"><use href="#wheel"/></g></g>
+      <g transform="translate(305 160)"><g class="spin"><use href="#wheel"/></g></g>
+
+      <!-- 반대쪽 크랭크와 다리 -->
+      <line id="farCrank" stroke="#333" stroke-width="5" stroke-linecap="round"/>
+      <line id="farPedal" stroke="#333" stroke-width="4" stroke-linecap="round"/>
+      <g id="farLeg" data-skin="#c48e63" data-short="#000"></g>
+
+      <!-- 체인 / 카세트 -->
+      <circle cx="95" cy="160" r="9" fill="none" stroke="#3a3a3c" stroke-width="3"/>
+      <line x1="190" y1="149" x2="95" y2="151" stroke="#3a3a3c" stroke-width="2"/>
+      <line x1="190" y1="181" x2="95" y2="169" stroke="#3a3a3c" stroke-width="2"/>
+
+      <!-- 프레임 -->
+      <g stroke="url(#frameGrad)" stroke-linecap="round" fill="none">
+        <line x1="190" y1="165" x2="95" y2="160" stroke-width="7"/>    <!-- 체인스테이 -->
+        <line x1="178" y1="112" x2="95" y2="160" stroke-width="6"/>    <!-- 드롭 시트스테이 -->
+        <line x1="297" y1="100" x2="305" y2="160" stroke-width="10"/>  <!-- 포크 -->
+        <line x1="172" y1="84" x2="288" y2="74" stroke-width="9"/>     <!-- 탑튜브 -->
+        <line x1="190" y1="165" x2="165" y2="72" stroke-width="12"/>   <!-- 시트튜브 -->
+        <line x1="165" y1="72" x2="161" y2="57" stroke-width="9"/>     <!-- 시트마스트 -->
+        <line x1="190" y1="165" x2="296" y2="101" stroke-width="17"/>  <!-- 다운튜브 -->
+        <line x1="287" y1="68" x2="296" y2="104" stroke-width="15"/>   <!-- 헤드튜브 -->
+      </g>
+
+      <!-- 스템 / 핸들바 -->
+      <line x1="285" y1="65" x2="318" y2="60" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+      <path d="M318 60 q20 -2 20 20 q0 18 -16 18" fill="none" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+
+      <!-- 체인링 / 앞쪽 크랭크 -->
+      <circle cx="190" cy="165" r="16" fill="none" stroke="#2c2c2e" stroke-width="3"/>
+      <line id="nearCrank" stroke="#111" stroke-width="5" stroke-linecap="round"/>
+      <line id="nearPedal" stroke="#111" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="190" cy="165" r="5" fill="#d2001e"/>
+
+      <!-- 안장 -->
+      <path d="M138 54 Q160 47 188 51 L186 57 Q160 55 140 59 Z" fill="#111"/>
+
+      <!-- 라이더 -->
+      <g stroke-linecap="round" fill="none">
+        <g id="farArm"></g>
+        <path d="M165 42 Q205 0 252 -8" stroke="#c8102e" stroke-width="24"/>
+        <path d="M168 34 Q205 -2 248 -12" stroke="#ff3347" stroke-width="4"/>
+        <circle cx="166" cy="42" r="12" fill="#111" stroke="none"/>
+        <line x1="252" y1="-8" x2="268" y2="-17" stroke="#e0ac7e" stroke-width="9"/>
+        <circle cx="276" cy="-20" r="11" fill="#e0ac7e" stroke="none"/>
+        <ellipse cx="272" cy="-27" rx="16" ry="9" transform="rotate(-12 272 -27)" fill="#d2001e" stroke="none"/>
+        <path d="M258 -27 Q272 -36 287 -30" stroke="#fff" stroke-width="2"/>
+        <rect x="280" y="-24" width="10" height="4" rx="2" fill="#111" stroke="none"/>
+        <g id="nearLeg" data-skin="#e0ac7e" data-short="#111"></g>
+        <g id="nearArm"></g>
+      </g>
+    </g>
+  </svg>
+
+  <div class="display" id="display">00:00.00</div>
+  <div class="controls">
+    <button id="lapReset" disabled>랩</button>
+    <button id="startStop" class="start">시작</button>
+  </div>
+  <ul class="laps" id="laps"></ul>
+</div>
+
+<script>
+  const display = document.getElementById('display');
+  const startStopBtn = document.getElementById('startStop');
+  const lapResetBtn = document.getElementById('lapReset');
+  const lapsEl = document.getElementById('laps');
+  const spins = document.querySelectorAll('.spin');
+  const scrolls = document.querySelectorAll('.scroll');
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(SVG_NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  // 바퀴 살 그리기
+  const spokes = document.getElementById('spokes');
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * Math.PI * 2;
+    el('line', {
+      x1: Math.cos(a) * 6, y1: Math.sin(a) * 6,
+      x2: Math.cos(a) * 46, y2: Math.sin(a) * 46
+    }, spokes);
+  }
+
+  // ---- 라이더 (역기구학으로 무릎·팔꿈치 위치 계산) ----
+  const BB = { x: 190, y: 165 };
+  const HIP = { x: 166, y: 42 };
+  const SHOULDER = { x: 252, y: -8 };
+  const HAND = { x: 326, y: 62 };
+  const CRANK = 28, THIGH = 78, SHIN = 80;
+
+  const lerp = (p, q, t) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
+  function setLine(line, p, q) {
+    line.setAttribute('x1', p.x); line.setAttribute('y1', p.y);
+    line.setAttribute('x2', q.x); line.setAttribute('y2', q.y);
+  }
+
+  // p에서 q까지 길이 a, b인 두 관절 — pick으로 굽는 방향 선택
+  function ik(p, q, a, b, pick) {
+    const dx = q.x - p.x, dy = q.y - p.y;
+    const d = Math.min(Math.hypot(dx, dy), a + b - 0.01);
+    const theta = Math.atan2(dy, dx);
+    const alpha = Math.acos((a * a + d * d - b * b) / (2 * a * d));
+    const k1 = { x: p.x + a * Math.cos(theta + alpha), y: p.y + a * Math.sin(theta + alpha) };
+    const k2 = { x: p.x + a * Math.cos(theta - alpha), y: p.y + a * Math.sin(theta - alpha) };
+    return pick(k1, k2);
+  }
+
+  // 다리는 엉덩이-무릎-발목을 한 획으로 그려 무릎 관절이 끊기지 않게 함
+  function makeLeg(g) {
+    const skin = g.dataset.skin, shorts = g.dataset.short;
+    const round = { fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
+    return {
+      leg: el('path', { ...round, stroke: skin, 'stroke-width': 12 }, g),
+      sock: el('line', { ...round, stroke: '#fff', 'stroke-width': 10 }, g),
+      shoe: el('line', { ...round, stroke: '#111', 'stroke-width': 8 }, g),
+      thigh: el('line', { ...round, stroke: shorts, 'stroke-width': 15 }, g),
+    };
+  }
+
+  function drawLeg(leg, pedal) {
+    const ankle = { x: pedal.x - 4, y: pedal.y - 8 };
+    const knee = ik(HIP, ankle, THIGH, SHIN, (a, b) => a.x > b.x ? a : b);
+    leg.leg.setAttribute('d', `M${HIP.x} ${HIP.y} L${knee.x} ${knee.y} L${ankle.x} ${ankle.y}`);
+    setLine(leg.thigh, HIP, lerp(HIP, knee, 0.7));
+    setLine(leg.sock, lerp(knee, ankle, 0.8), ankle);
+    setLine(leg.shoe, ankle, { x: pedal.x + 10, y: pedal.y - 1 });
+  }
+
+  function drawArm(g, skin) {
+    const elbow = ik(SHOULDER, HAND, 52, 56, (a, b) => a.y > b.y ? a : b);
+    el('line', { x1: SHOULDER.x, y1: SHOULDER.y, x2: elbow.x, y2: elbow.y, stroke: skin, 'stroke-width': 10 }, g);
+    const sleeve = lerp(SHOULDER, elbow, 0.45);
+    el('line', { x1: SHOULDER.x, y1: SHOULDER.y, x2: sleeve.x, y2: sleeve.y, stroke: '#c8102e', 'stroke-width': 13 }, g);
+    el('line', { x1: elbow.x, y1: elbow.y, x2: HAND.x, y2: HAND.y, stroke: skin, 'stroke-width': 9 }, g);
+    el('circle', { cx: HAND.x, cy: HAND.y, r: 5.5, fill: '#111', stroke: 'none' }, g);
+  }
+
+  drawArm(document.getElementById('farArm'), '#c48e63');
+  drawArm(document.getElementById('nearArm'), '#e0ac7e');
+
+  const nearLeg = makeLeg(document.getElementById('nearLeg'));
+  const farLeg = makeLeg(document.getElementById('farLeg'));
+  const nearCrank = document.getElementById('nearCrank');
+  const farCrank = document.getElementById('farCrank');
+  const nearPedal = document.getElementById('nearPedal');
+  const farPedal = document.getElementById('farPedal');
+
+  function drawPedaling(rad) {
+    const near = { x: BB.x + CRANK * Math.sin(rad), y: BB.y - CRANK * Math.cos(rad) };
+    const far = { x: 2 * BB.x - near.x, y: 2 * BB.y - near.y };
+    setLine(nearCrank, BB, near);
+    setLine(farCrank, BB, far);
+    setLine(nearPedal, { x: near.x - 6, y: near.y }, { x: near.x + 6, y: near.y });
+    setLine(farPedal, { x: far.x - 6, y: far.y }, { x: far.x + 6, y: far.y });
+    drawLeg(nearLeg, near);
+    drawLeg(farLeg, far);
+  }
+
+  const WHEEL_REV_MS = 1000;                // 1초에 바퀴·페달 정확히 한 바퀴
+  const WHEEL_CIRC = 2 * Math.PI * 62;      // 바퀴 둘레(px)
+
+  let running = false;
+  let startTime = 0;   // 현재 구간 시작 시각
+  let elapsed = 0;     // 이전 구간까지 누적 시간
+  let lapStart = 0;    // 현재 랩이 시작된 누적 시간
+  let laps = [];
+  let rafId = null;
+
+  function now() { return performance.now(); }
+  function total() { return running ? elapsed + (now() - startTime) : elapsed; }
+
+  function format(ms) {
+    const cs = Math.floor(ms / 10) % 100;
+    const s = Math.floor(ms / 1000) % 60;
+    const m = Math.floor(ms / 60000) % 60;
+    const h = Math.floor(ms / 3600000);
+    const pad = n => String(n).padStart(2, '0');
+    return (h > 0 ? h + ':' : '') + pad(m) + ':' + pad(s) + '.' + pad(cs);
+  }
+
+  // 경과 시간에 맞춰 바퀴·페달·도로를 움직임 (정지하면 그 자리에 멈춤)
+  function renderBike(t) {
+    const revs = t / WHEEL_REV_MS;
+    spins.forEach(g => g.setAttribute('transform', `rotate(${(revs * 360) % 360})`));
+    drawPedaling(revs * Math.PI * 2);
+    const offset = (revs * WHEEL_CIRC) % 480;
+    scrolls.forEach(p => p.setAttribute('patternTransform', `translate(${-offset} 0)`));
+  }
+
+  function tick() {
+    const t = total();
+    display.textContent = format(t);
+    renderBike(t);
+    renderCurrentLap();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function renderCurrentLap() {
+    const cur = lapsEl.querySelector('li.current span:last-child');
+    if (cur) cur.textContent = format(total() - lapStart);
+  }
+
+  function renderLaps() {
+    lapsEl.innerHTML = '';
+    if (!running && elapsed === 0) return;
+
+    const li = document.createElement('li');
+    li.className = 'current';
+    li.innerHTML = `<span>랩 ${laps.length + 1}</span><span>${format(total() - lapStart)}</span>`;
+    lapsEl.appendChild(li);
+
+    const min = Math.min(...laps), max = Math.max(...laps);
+    for (let i = laps.length - 1; i >= 0; i--) {
+      const item = document.createElement('li');
+      if (laps.length >= 2) {
+        if (laps[i] === min) item.className = 'best';
+        else if (laps[i] === max) item.className = 'worst';
+      }
+      item.innerHTML = `<span>랩 ${i + 1}</span><span>${format(laps[i])}</span>`;
+      lapsEl.appendChild(item);
+    }
+  }
+
+  function startStop() {
+    if (running) {
+      elapsed += now() - startTime;
+      running = false;
+      cancelAnimationFrame(rafId);
+      display.textContent = format(elapsed);
+      renderBike(elapsed);
+      startStopBtn.textContent = '시작';
+      startStopBtn.className = 'start';
+      lapResetBtn.textContent = '재설정';
+    } else {
+      startTime = now();
+      running = true;
+      startStopBtn.textContent = '정지';
+      startStopBtn.className = 'stop';
+      lapResetBtn.textContent = '랩';
+      lapResetBtn.disabled = false;
+      rafId = requestAnimationFrame(tick);
+    }
+    renderLaps();
+  }
+
+  function lap() {
+    if (!running) return;
+    const t = total();
+    laps.push(t - lapStart);
+    lapStart = t;
+    renderLaps();
+  }
+
+  function reset() {
+    if (running) return;
+    elapsed = 0;
+    lapStart = 0;
+    laps = [];
+    display.textContent = format(0);
+    renderBike(0);
+    lapResetBtn.textContent = '랩';
+    lapResetBtn.disabled = true;
+    renderLaps();
+  }
+
+  startStopBtn.addEventListener('click', startStop);
+  lapResetBtn.addEventListener('click', () => running ? lap() : reset());
+
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); startStop(); }
+    else if (e.key === 'l' || e.key === 'L') lap();
+    else if (e.key === 'r' || e.key === 'R') reset();
+  });
+
+  renderBike(0);
+</script>
+</body>
+</html>
